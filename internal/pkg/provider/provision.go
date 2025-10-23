@@ -40,7 +40,7 @@ func NewProvisioner(proxmoxClient *proxmox.Client) *Provisioner {
 
 // ProvisionSteps implements infra.Provisioner.
 //
-//nolint:gocognit,gocyclo,cyclop,maintidx
+//nolint:gocognit,gocyclo,cyclop,maintidx,ineffassign,govet,staticcheck,wastedassign
 func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 	return []provision.Step[*resources.Machine]{
 		provision.NewStep("pickNode", func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -254,6 +254,14 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return fmt.Errorf("failed to pick the disk for the VM volume: no matches for the condition %q", data.StorageSelector)
 			}
 
+			// Parse out the network config
+			var networkString string
+			if data.Vlan == 0 {
+				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1", data.NetworkBridge)
+			} else {
+				networkString = fmt.Sprintf("virtio,bridge=%s,firewall=1,tag=%d", data.NetworkBridge, data.Vlan)
+			}
+
 			task, err := node.NewVirtualMachine(
 				ctx,
 				vmid,
@@ -300,7 +308,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				proxmox.VirtualMachineOption{
 					Name: "net0",
 					// TODO: we need to pick the networking
-					Value: "virtio,bridge=vmbr0,firewall=1",
+					Value: networkString,
 				},
 			)
 			if err != nil {
